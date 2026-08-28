@@ -1,0 +1,138 @@
+# ---------------------------------------------------------------------------
+# agent.yaml - Funnel Hacking AI's own knobs. `make setup` copies this to
+# config/agent.yaml; edit that copy, this example stays as a clean reference.
+#
+# The one section you MUST look at before this agent is useful is
+# `experiment_catalog` below - the engine never invents copy (see
+# docs/how-it-works.md "Design decisions" #2), so it only ever proposes a
+# test you have described here.
+# ---------------------------------------------------------------------------
+
+# --- Which systems this agent actually reads/writes through core/adapters --
+# The funnel data itself arrives as CSV in data/imports/*.csv, not from an
+# adapter - this is only about core/adapters. This agent notifies staff to
+# start a test or ship a winner (messaging) and nothing else here: it never
+# calls the PMS and never touches a mailbox, so pms and email are left out
+# on purpose. Their `adapter: mock` in config/hotel.yaml stays mock forever
+# and must never trigger a "SAMPLE DATA" warning about data this agent does
+# not read. Listing messaging still warns you correctly if THAT is left on
+# mock once you are running for real. See docs/integrations.md.
+systems_used: [messaging]
+
+# How many of the most recent days of `funnel_daily` feed the analysis.
+window_days: 30
+
+# Session -> booking-engine-click and search -> booking benchmark bands, in
+# percent. These are HOTEL numbers with no evidence behind them for a
+# restaurant funnel - re-source both before you trust a projection there.
+# See docs/how-it-works.md "Restaurant lens".
+benchmarks:
+  click_low_pct: 4.0          # ordinary page: below this, the page is a leak
+  click_high_pct: 6.0
+  content_click_low_pct: 1.0  # kind: blog pages get their own, lower floor
+  search_healthy_floor_pct: 50.0   # click -> dated search: below this is worth a look
+  search_book_low_pct: 25.0
+  search_book_high_pct: 35.0
+
+# The assumptions behind every euro figure this agent prints.
+economics:
+  avg_booking_value: 260      # hotel.currency; a covers x average-spend number for a restaurant
+  marginal_factor: 0.5        # a projection assumes new clickers book at this fraction of today's rate
+  round_projected_to: 100     # round a projected monthly figure to the nearest N
+  round_measured_to: 50       # round a measured monthly figure to the nearest N
+
+# Statistics and pacing for the experiment loop (docs/how-it-works.md
+# "The experiment loop").
+significance_bar_pct: 95.0    # two-proportion z-test confidence bar to publish
+min_days_running: 14          # minimum distinct days of per-arm data before scoring
+max_concurrent_experiments: 2
+big_swing_pct: 25.0           # a click-through lift past this always waits for a person
+
+# A "Dismiss" on a proposed test stays quiet - it is NOT re-proposed the next
+# time this agent runs, even the next day (see docs/how-it-works.md "Step
+# 5"). It only comes back once the page's projected monthly EUR value has
+# moved by at least this many percent since the rejection - e.g. a big swing
+# in traffic or booking rate made the leak materially bigger or smaller than
+# what a person actually said no to.
+rejected_reopen_pct: 20.0
+
+# The rule toggles the engine reads every run. Turning one off is the
+# fastest way to see, and prove, exactly what it does - see
+# docs/how-it-works.md "Step 5 - build proposals" and "Step 9 - gate and push".
+rules:
+  seo_watch: true             # off = suppress every kind: blog catalog entry
+  brand_voice_lock: true      # on = attach brand_voice_note to every copy proposal
+  max_2_concurrent: true      # on = tools/review.py approve refuses past the cap
+  significance_95: true       # on = the 95% bar gates "Approve and push"
+  auto_rollout: false         # on = a significant, positive, non-big-swing decision
+                               #      attempts to publish itself - still subject to
+                               #      mode: shadow and review.require_approval_for
+                               #      in config/hotel.yaml. Off by default: nothing
+                               #      ships itself. See docs/safety.md.
+
+# Shown verbatim on any proposal whose catalog `kind` is `copy`, when
+# brand_voice_lock is on. Write your own - this is an annotation, not a
+# vocabulary check; see docs/how-it-works.md "Design decisions" #9.
+brand_voice_note: >
+  Brand voice lock is on: check this copy against knowledge/brand-voice.md
+  before you ship it. Turn rules.brand_voice_lock off to stop seeing this
+  note.
+
+# ---------------------------------------------------------------------------
+# The catalog: every test idea this agent is allowed to propose. One page,
+# one variable, per row. `kind: copy | image | placement | layout` decides
+# whether brand_voice_lock applies. Add your own rows; each `variant_a` /
+# `variant_b` is a plain-language description a person implements in your
+# CMS or A/B testing tool - this repo never patches a live page. Page
+# `slug`s below must match a row in your `site_pages` export
+# (fixtures/inbound/site_pages.csv for the shipped example).
+# ---------------------------------------------------------------------------
+experiment_catalog:
+  - page_slug: home
+    element: hero.cta.copy
+    kind: copy
+    title: "Homepage hero button: a sharper call to action"
+    hypothesis: >
+      "Book Now" describes an action, not a benefit. A button that names
+      the outcome should pull more first clicks into the booking engine.
+    variant_a: "Book Now"
+    variant_b: "Check today's rate"
+
+  - page_slug: home
+    element: hero.cta.subline
+    kind: copy
+    title: "Homepage hero: add a reassurance subline under the button"
+    hypothesis: >
+      A one-line reassurance under the primary button (free cancellation,
+      no card fees) should lift clicks from visitors who are close but
+      hesitant.
+    variant_a: "(no subline)"
+    variant_b: "Free cancellation up to 48 hours before arrival"
+
+  - page_slug: offers
+    element: cta.placement
+    kind: placement
+    title: "Offers page: a sticky book bar"
+    hypothesis: >
+      The offers page is long; a sticky call-to-action keeps the booking
+      engine one tap away instead of a scroll back to the top.
+    variant_a: "Book button only at the top of the page"
+    variant_b: "Add a sticky book bar that follows the scroll"
+
+  - page_slug: journal-coastal-walks
+    element: article.cta
+    kind: copy
+    title: "Journal post: add a booking block inside the article"
+    hypothesis: >
+      A reader who finishes a 1,200-word post has shown real intent; a
+      booking prompt inside the article, not just at the top, should catch
+      readers who do not scroll back up.
+    variant_a: "(no in-article booking prompt)"
+    variant_b: "Check availability for your coastal break"
+
+# How often `tools/run.py --watch` re-runs, and what `make schedule` prints
+# by default. See scheduler/ for cron/launchd/systemd.
+schedule:
+  funnel_analysis:
+    command: "tools/run.py --once"
+    cadence: "0 6 * * *"        # daily at 06:00 - covers both proposing and scoring

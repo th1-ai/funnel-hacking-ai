@@ -1,0 +1,6 @@
+slug,title,path,kind,sessions_30d,engine_clicks_30d,sort
+home,Home,/,page,1400,42,1
+rooms,Rooms,/rooms,page,550,24,2
+offers,Offers,/offers,page,380,12,3
+spa,Spa,/spa,page,220,11,4
+journal-coastal-walks,"The Journal: Three Coastal Walks From the Hotel",/journal/coastal-walks,blog,900,5,5

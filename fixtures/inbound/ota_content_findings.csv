@@ -1,0 +1,4 @@
+channel,kind,detail,severity
+Booking.com,photos,Only 4 photos uploaded against a 20-photo limit,high
+Expedia,description,Room description has not been updated since the renovation,medium
+Google Hotel Ads,amenities,Spa and airport transfer are missing from the amenities list,medium
